@@ -1,0 +1,107 @@
+
++------------------------------+
+          |          CS 450              |
+          |PROJECT 4: PRIORITY SCHEDULING|
+          |      DESIGN DOCUMENT         |
+          +------------------------------+
+ 
+---- GROUP ----
+ 
+>> Fill in the names and email addresses of your group members.
+ 
+Gabriel Doon doongs@dukes.jmu.edu
+Ryan Gross grossrd@dukes.jmu.edu
+Sydney May may4sa@dukes.jmu.edu
+Katherine Shepherd shephekl@dukes.jmu.edu
+ 
+---- PRELIMINARIES ----
+ 
+>> If you have any preliminary comments on your submission, please give
+>> them here.
+ 
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+ 
+                         PRIORITY SCHEDULING
+                         ===================
+ 
+---- DATA STRUCTURES ----
+ 
+>> B1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+ 
+thread.h
+   struct thread *prio_recipient;
+	Thread pointer that points to the recipient thread of a priority 
+donation.
+   int priority_parent;
+	Holds the priority of the donating thread.
+   int priority_grandparent;
+Holds the priority of the donating thread’s donator.
+   struct lock *waitingToDonate;
+	Lock pointer that points to the lock held by the priority donator 
+thread.
+thread.c
+   void donate_priority(struct thread *donator, struct thread *receiver);
+	This function donates the priority of a thread to another thread. 
+Called when a thread is blocked.
+   void reset_priority(struct thread *receiver);
+	This function resets a thread’s priority. Called when a thread is 
+unblocked.
+   bool compare_thread_priorities(const struct list_elem *one, const 
+   struct list_elem *two, void *aux);
+	This function returns true if the priority of the first thread is 
+greater than the priority of the second thread and false otherwise.
+synch.c
+   bool compare_semaphores_by_threads(const struct list_elem *one, const 
+   struct list_elem *two, void *aux);
+	Returns true if the priority of the thread holding the first 
+semaphore is greater than that of the thread holding the second 
+      and false otherwise.
+ 
+>> B2: Explain the data structure used to track priority donation.
+ 
+These are the structures being used to track priority:
+   struct thread *prio_recipient;
+   int priority_parent;
+   int priority_grandparent;
+   struct lock *waitingToDonate;
+The prio_recipient struct is a thread pointer that points to the recipient thread of a priority donation. The priority_parent integer is for multiple priority donations. It holds the priority of the donating thread. The priority_gradparent integer is also for multiple priority donations, but for situations where a priority recipient is donating its priority. In this case, this structure holds the priority of the thread that donated its priority to the thread donating its priority to another recipient thread. The waitingToDonate structure holds the lock that the thread that is about to donate its priority is holding.
+ 
+ 
+---- ALGORITHMS ----
+ 
+>> B3: How do you ensure that the highest priority thread waiting for
+>> a lock, semaphore, or condition variable wakes up first?
+ 
+Any time a thread needs to wait on a lock, semaphore, or condition var it is put into a list of all other related waiters. These lists are sorted by priority when threads are woken up, thus the highest priority thread will wake. 
+ 
+>> B4: Describe the sequence of events when a call to lock_acquire()
+>> causes a priority donation.  How is nested donation handled?
+ 
+In lock_acquire(), the waitingToDonate field of the current thread is set to the lock parameter sent into the function. Then the lock’s semaphore is decremented by calling sema_down which, if the semaphore original value is 0 (meaning the calling thread is about to be blocked once the semaphore’s values is decremented), the thread is added to the list of threads waiting on the semaphore, this list is sorted by thread priority, and then the thread is blocked using the thread_block function. If the current thread’s priority is greater than the thread that is holding the lock, then the current thread’s priority is set to the holder thread’s priority. When the semaphore value is greater than 0, the thread yields and the semaphore value is decremented. After the semaphore decrement is processed, the lock holder is set to the current thread.
+ 
+>> B5: Describe the sequence of events when lock_release() is called
+>> on a lock that a higher-priority thread is waiting for.
+ 
+In lock_release(), the semaphore is incremented with a call to sema_up which, if there are threads waiting on the semaphore, calls thread_unblock(). In this function, the current thread is added to the ready list which is then sorted by priority. Then, if there is a thread the current thread donated its priority to, reset_priority is called. This function the priority of the thread that received the priority donation is set to the original priority it had before the donation occurred. The priority recipient of the current thread is then set to null.
+ 
+ 
+ 
+---- SYNCHRONIZATION ----
+ 
+>> B6: Describe a potential race in thread_set_priority() and explain
+>> how your implementation avoids it.  Can you use a lock to avoid
+>> this race?
+ 
+The race condition that could occur is when a thread tries to set it’s parent’s priority. If the parent thread is also calling the function, then the actual parent priority may not be what is expected. You cannot use a lock to avoid this race because of priority donation. If the function  had locks and the parent called it, it would have to donate its priority to the child, which would run and could possibly call the function still leading to the above race condition. Instead, we check if the parent's priority has been changed, if so then we set it, otherwise we will change the current thread's priority.
+ 
+---- RATIONALE ----
+ 
+>> B7: Why did you choose this design?  In what ways is it superior to
+>> another design you considered?
+ 
+We chose this design as it was recommended in the document write up. Using a base and effective priority is superior in that you always can refer to the base priority and that you only need to edit the effective priority. It is also superior in simplicity as it keeps donation effectively as a parent style hierarchy. 
+
